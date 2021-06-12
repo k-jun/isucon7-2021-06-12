@@ -1,0 +1,35 @@
+version: "3" 
+services:
+  app:
+    image: golang:1.9
+    ports:
+      - "5000:5000"
+    tty: true
+    working_dir: /src
+    volumes:
+      - .:/src
+    command: ./isubata
+    environment:
+      MYSQL_DATABASE: test
+      ISUBATA_DB_HOST: mysql
+  mysql:
+    image: mysql:5.7
+    ports:
+      - 3306:3306
+    volumes:
+      - ./mysqldump/:/mysqldump/
+      - mysql-data:/var/lib/mysql
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+      MYSQL_DATABASE: isubata
+  nginx:
+    ports:
+      - "8080:80"
+    image: nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./public/:/src/public/
+volumes:
+  mysql-data:
+    external:
+      name: mysql57_volume
