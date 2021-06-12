@@ -17,13 +17,14 @@ import (
 	"strings"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/middleware"
-	_ "net/http/pprof"
 )
 
 const (
@@ -453,27 +454,29 @@ func fetchUnread(c echo.Context) error {
 	resp := []map[string]interface{}{}
 
 	for _, chID := range channels {
-		lastID, err := queryHaveRead(userID, chID)
-		if err != nil {
-			return err
+		r := map[string]interface{}{
+			"channel_id": chID,
+			"unread":     0,
 		}
+		resp = append(resp, r)
+	}
 
-		var cnt int64
-		if lastID > 0 {
-			err = db.Get(&cnt,
-				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id",
-				chID, lastID)
-		} else {
-			err = db.Get(&cnt,
-				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?",
-				chID)
-		}
+	rows, err := db.Query(`
+		select channel_id, count(*) from message join (select channel.*, ifnull(haveread.message_id, 0) as message_id from channel left join haveread on haveread.channel_id = channel.id and haveread.user_id = ?) as a on a.id = message.channel_id where message.id > a.message_id group by channel_id;`,
+		userID,
+	)
+
+	for rows.Next() {
+		var chID string
+		var cnt int
+		err = rows.Scan(&chID, &cnt)
 		if err != nil {
 			return err
 		}
 		r := map[string]interface{}{
 			"channel_id": chID,
-			"unread":     cnt}
+			"unread":     cnt,
+		}
 		resp = append(resp, r)
 	}
 
