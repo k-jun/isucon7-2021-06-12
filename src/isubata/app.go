@@ -446,25 +446,24 @@ func fetchUnread(c echo.Context) error {
 
 	time.Sleep(time.Second)
 
-	channels, err := queryChannels()
+	resp := []map[string]interface{}{}
+
+	rows, err := db.Query(`
+select channel.id, ifnull(a.cnt, 0)
+from channel
+left join (
+	select channel_id, count(*) as cnt
+	from message
+	join (select channel.*, ifnull(haveread.message_id, 0) as message_id from channel left join haveread on haveread.channel_id = channel.id and haveread.user_id = ?) as a on a.id = message.channel_id
+	where message.id > a.message_id
+	group by channel_id
+) as a on a.channel_id = channel.id;
+`,
+		userID,
+	)
 	if err != nil {
 		return err
 	}
-
-	resp := []map[string]interface{}{}
-
-	for _, chID := range channels {
-		r := map[string]interface{}{
-			"channel_id": chID,
-			"unread":     0,
-		}
-		resp = append(resp, r)
-	}
-
-	rows, err := db.Query(`
-		select channel_id, count(*) from message join (select channel.*, ifnull(haveread.message_id, 0) as message_id from channel left join haveread on haveread.channel_id = channel.id and haveread.user_id = ?) as a on a.id = message.channel_id where message.id > a.message_id group by channel_id;`,
-		userID,
-	)
 
 	for rows.Next() {
 		var chID string
@@ -473,6 +472,7 @@ func fetchUnread(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		fmt.Println("chID", chID, "cnt", cnt)
 		r := map[string]interface{}{
 			"channel_id": chID,
 			"unread":     cnt,
